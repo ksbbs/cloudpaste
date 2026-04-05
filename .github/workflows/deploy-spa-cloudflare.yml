@@ -82,7 +82,7 @@ jobs:
         working-directory: ./frontend
         run: |
           echo "安装前端依赖..."
-          npm ci
+          npm install
 
       - name: Build frontend
         working-directory: ./frontend

@@ -116,10 +116,10 @@ export const createRateLimit = (options = {}) => {
  * 预定义的限流策略
  */
 export const rateLimits = {
-  // 严格限制 - 登录等敏感操作：5 分钟内最多 5 次
+  // 严格限制 - 登录等敏感操作：5 分钟内最多 10 次
   strict: createRateLimit({
     windowMs: 5 * 60 * 1000,
-    maxRequests: 5,
+    maxRequests: 10,
     message: "登录尝试过多，请 5 分钟后再试"
   }),
 
