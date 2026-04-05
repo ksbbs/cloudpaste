@@ -1,0 +1,228 @@
+/**
+ * 文件操作 Composable
+ * 基于 FS service 提供统一的下载、重命名、建目录、批量删除、获取直链等 UI 逻辑
+ */
+
+import { ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { copyToClipboard } from "@/utils/clipboard.js";
+import { useFsService } from "@/modules/fs";
+import { createLogger } from "@/utils/logger.js";
+
+/** @typedef {import("@/types/fs").FsDirectoryItem} FsDirectoryItem */
+
+/**
+ * @typedef {Object} FileOperationResult
+ * @property {boolean} success
+ * @property {string} message
+ * @property {string} [url]
+ */
+
+export function useFileOperations() {
+  const { t } = useI18n();
+  const fsService = useFsService();
+  const log = createLogger("FileOperations");
+
+  const loading = ref(false);
+  const error = ref(/** @type {string | null} */ (null));
+
+  // ===== 下载文件 =====
+
+  /**
+   * 下载文件
+   * @param {string | FsDirectoryItem} pathOrItem - 文件路径或文件对象
+   * @returns {Promise<FileOperationResult>}
+   */
+  const downloadFile = async (pathOrItem) => {
+    /** @type {FsDirectoryItem} */
+    const item =
+      typeof pathOrItem === "string"
+        ? { path: pathOrItem, name: pathOrItem.split("/").pop() || pathOrItem, isDirectory: false }
+        : pathOrItem;
+
+    if (!item || item.isDirectory) {
+      return { success: false, message: t("mount.messages.cannotDownloadDirectory") };
+    }
+
+    try {
+      loading.value = true;
+      error.value = null;
+
+      // 优先使用控制面 /api/fs/get 生成的 downloadUrl
+      if (item.downloadUrl) {
+        const link = document.createElement("a");
+        link.href = item.downloadUrl;
+        link.download = item.name || "";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // 无 downloadUrl 时回退为按需签发（file-link）下载
+        await fsService.downloadFile(item.path, item.name);
+      }
+
+      return { success: true, message: t("mount.messages.downloadStarted", { name: item.name }) };
+    } catch (err) {
+      log.error("下载文件失败:", err);
+      error.value = /** @type {any} */ (err)?.message;
+      return { success: false, message: t("mount.messages.downloadFailed", { name: item.name, message: error.value }) };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // ===== 重命名 =====
+
+  /**
+   * 重命名文件或目录
+   * @param {string} oldPath
+   * @param {string} newPath
+   * @returns {Promise<FileOperationResult>}
+   */
+  const renameItem = async (oldPath, newPath) => {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      await fsService.renameItem(oldPath, newPath);
+      return { success: true, message: t("mount.messages.renameSuccess") };
+    } catch (err) {
+      log.error("重命名失败:", err);
+      error.value = /** @type {any} */ (err)?.message;
+      return { success: false, message: error.value || "重命名失败" };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // ===== 创建目录 =====
+
+  /**
+   * 创建目录
+   * @param {string} parentPath
+   * @param {string} folderName
+   * @returns {Promise<FileOperationResult>}
+   */
+  const createFolder = async (parentPath, folderName) => {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      const fullPath = parentPath.endsWith("/") ? `${parentPath}${folderName}/` : `${parentPath}/${folderName}/`;
+
+      await fsService.createDirectory(fullPath);
+      return { success: true, message: t("mount.messages.createFolderSuccess") };
+    } catch (err) {
+      log.error("创建文件夹失败:", err);
+      error.value = /** @type {any} */ (err)?.message;
+      return { success: false, message: error.value || "创建文件夹失败" };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // ===== 批量删除 =====
+
+  /**
+   * 批量删除文件/目录
+   * @param {FsDirectoryItem | FsDirectoryItem[] | string} itemsOrItem
+   * @returns {Promise<FileOperationResult>}
+   */
+  const batchDeleteItems = async (itemsOrItem) => {
+    let items;
+    if (typeof itemsOrItem === "string") {
+      items = [{ path: itemsOrItem, name: itemsOrItem.split("/").pop() || itemsOrItem, isDirectory: false }];
+    } else if (Array.isArray(itemsOrItem)) {
+      items = itemsOrItem;
+    } else {
+      items = [itemsOrItem];
+    }
+
+    if (!items || items.length === 0) {
+      return { success: false, message: t("mount.messages.noItemsToDelete") };
+    }
+
+    try {
+      loading.value = true;
+      error.value = null;
+
+      const paths = items.map((item) => item.path);
+      await fsService.batchDeleteItems(paths);
+
+      return {
+        success: true,
+        message: t("mount.messages.batchDeleteSuccess", { count: items.length }),
+      };
+    } catch (err) {
+      log.error("批量删除失败:", err);
+      error.value = /** @type {any} */ (err)?.message;
+      return {
+        success: false,
+        message: t("mount.messages.batchDeleteFailed", { message: error.value }),
+      };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // ===== 获取直链并复制到剪贴板 =====
+
+  /**
+   * 获取文件直链并复制到剪贴板
+   * @param {FsDirectoryItem} item
+   * @param {number|null} [expiresIn]
+   * @param {boolean} [forceDownload=true]
+   * @returns {Promise<FileOperationResult>}
+   */
+  const getFileLink = async (item, expiresIn = null, forceDownload = true) => {
+    if (item.isDirectory) {
+      return {
+        success: false,
+        message: t("mount.messages.directoryNoLink"),
+      };
+    }
+
+    try {
+      loading.value = true;
+      error.value = null;
+
+      const url = await fsService.getFileLink(item.path, expiresIn, forceDownload);
+
+      return {
+        success: true,
+        message: (await copyToClipboard(url)) ? t("mount.messages.linkCopiedSuccess") : t("mount.messages.copyFailed"),
+        url,
+      };
+    } catch (err) {
+      log.error("获取文件直链失败:", err);
+      error.value = /** @type {any} */ (err)?.message;
+      return {
+        success: false,
+        message: error.value || t("mount.messages.getFileLinkError"),
+      };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  /**
+   * 清理错误状态
+   */
+  const clearError = () => {
+    error.value = null;
+  };
+
+  return {
+    // 状态
+    loading,
+    error,
+
+    // 操作
+    downloadFile,
+    renameItem,
+    createFolder,
+    batchDeleteItems,
+    getFileLink,
+    clearError,
+  };
+}

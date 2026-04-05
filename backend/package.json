@@ -1,0 +1,55 @@
+{
+  "name": "cloudpaste-api",
+  "version": "1.9.1",
+  "description": "CloudPaste API基于Cloudflare Workers和D1数据库",
+  "main": "unified-entry.js",
+  "scripts": {
+    "test": "node --test --test-concurrency=1",
+    "test:parallel": "node --test",
+    "dev": "wrangler dev --local",
+    "dev:scheduled": "wrangler dev --local --test-scheduled",
+    "deploy": "wrangler publish",
+    "deploy:spa": "wrangler deploy --config wrangler.spa.toml",
+    "docker-dev": "cross-env PORT=8787 ENCRYPTION_SECRET=default-encryption-key DATA_DIR=./data SCHEDULED_TICK_CRON=\"*/1 * * * *\" tsx unified-entry.js",
+    "docker-start": "cross-env PORT=8787 DATA_DIR=/data tsx unified-entry.js"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "d1",
+    "api",
+    "paste"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@aws-crypto/sha256-browser": "^5.2.0",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-s3": "3.726.1",
+    "@aws-sdk/lib-storage": "3.726.1",
+    "@aws-sdk/s3-request-presigner": "3.726.1",
+    "@hono/node-server": "^1.19.6",
+    "@huggingface/hub": "^2.7.1",
+    "better-sqlite3": "^12.5.0",
+    "cron-parser": "^5.4.0",
+    "fast-xml-parser": "^5.2.5",
+    "file-type": "^21.0.0",
+    "hono": "^4.10.6",
+    "mime-types": "^3.0.1",
+    "node-schedule": "^2.1.1",
+    "tsx": "^4.21.0",
+    "webdav": "^5.8.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251128.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "cross-env": "^7.0.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.50.0"
+  },
+  "optionalDependencies": {
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.6"
+  }
+}

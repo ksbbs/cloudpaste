@@ -1,0 +1,195 @@
+name: Deploy Frontend CF Pages[Pages前端分离部署]
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "frontend/**"
+      - "!frontend/vercel.json"
+  workflow_dispatch:
+    inputs:
+      from_panel:
+        description: "是否由部署控制面板触发 / triggered from deployment control panel"
+        required: false
+        default: "false"
+  repository_dispatch:
+    types: [deploy-button]
+
+jobs:
+  check-config:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🔍 检查部署配置
+        id: check
+        run: |
+          # 手动触发时（workflow_dispatch / repository_dispatch），总是部署，忽略自动部署开关
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 手动触发（repository_dispatch），忽略开关，允许部署"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.from_panel }}" != "true" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 手动触发（workflow_dispatch），忽略开关，允许部署"
+            exit 0
+          fi
+
+          # 自动触发（push 或控制面板触发）根据仓库级变量决定是否部署
+          FRONTEND_ENABLED="${{ vars.FRONTEND_DEPLOY }}"
+          # 默认行为：如果仓库变量未设置，视为已开启自动部署（向下兼容旧逻辑）
+          [ -z "$FRONTEND_ENABLED" ] && FRONTEND_ENABLED="true"
+
+          if [ "$FRONTEND_ENABLED" = "true" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 前端自动部署已开启，允许部署"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "⏸️ 前端自动部署已关闭，跳过部署"
+          fi
+
+  deploy-frontend-cloudflare:
+    needs: check-config
+    if: needs.check-config.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "./frontend/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check if deploy button trigger
+        id: check-deploy-button
+        run: |
+          if [[ "${{ github.event_name }}" == "repository_dispatch" && "${{ github.event.action }}" == "deploy-button" ]]; then
+            echo "is_deploy_button=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_deploy_button=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_APP_ENV: production
+          VITE_ENABLE_DEVTOOLS: false
+
+      - name: Copy Cloudflare Functions
+        run: |
+          mkdir -p dist/functions
+          cp -r functions/* dist/functions/ || echo "No functions directory found"
+
+      - name: Check if Pages project exists
+        id: check-project
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "检查 Cloudflare Pages 项目是否存在..."
+          PROJECT_CHECK=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" | jq -r '.result[] | select(.name=="cloudpaste-frontend") | .name')
+
+          if [ -n "$PROJECT_CHECK" ]; then
+            echo "✅ 找到现有Pages项目: cloudpaste-frontend"
+            echo "project_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ 未找到Pages项目: cloudpaste-frontend"
+            echo "project_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pages project if not exists
+        if: steps.check-project.outputs.project_exists == 'false'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "创建 Cloudflare Pages 项目: cloudpaste-frontend..."
+          cat << EOF > pages-config.json
+          {
+            "name": "cloudpaste-frontend",
+            "production_branch": "production"
+          }
+          EOF
+
+          CREATE_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @pages-config.json)
+
+          SUCCESS=$(echo "$CREATE_RESULT" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "❌ 创建Pages项目失败，请手动创建项目后再次运行"
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          COMMIT_MSG=$(cat << 'EOF'
+          ${{ github.event.head_commit.message }}
+          EOF
+          )
+          # 清理非UTF-8字符并限制长度
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | iconv -f utf-8 -t utf-8 -c | head -c 200)
+          # 如果消息为空或无效，使用默认消息
+          if [ -z "$CLEAN_MSG" ]; then
+            CLEAN_MSG="Deploy from GitHub Actions"
+          fi
+          npx wrangler pages deploy ./dist --project-name=cloudpaste-frontend --branch production --commit-message="$CLEAN_MSG" 2>&1 | sed -E 's/https:\/\/[a-zA-Z0-9.-]*\.(workers|pages)\.dev/https:\/\/[REDACTED].\1.dev/g'
+
+      - name: Display Success Information
+        if: steps.check-deploy-button.outputs.is_deploy_button == 'true' && success()
+        run: |
+          echo "===================================================="
+          echo "🎉 CloudPaste 前端已成功部署到 Cloudflare Pages!"
+          echo "===================================================="
+          echo ""
+          echo "注意: 您需要在 Cloudflare Pages 控制面板中手动设置环境变量:"
+          echo "- 登录 https://dash.cloudflare.com/"
+          echo "- 进入 Pages > cloudpaste-frontend > Settings > Environment variables"
+          echo "- 添加 VITE_BACKEND_URL = 您的后端Worker URL"
+          echo ""
+          echo "后续步骤："
+          echo "1. 访问您的 Cloudflare Pages URL"
+          echo "2. 使用默认管理员账户登录 (admin/admin123)"
+          echo "3. 立即修改默认管理员密码"
+          echo "4. 在管理员面板中配置您的S3兼容存储"
+          echo "===================================================="
+
+      - name: Display Troubleshooting Info
+        if: failure()
+        run: |
+          echo "===================================================="
+          echo "❌ 部署失败，可能的解决方案:"
+          echo "1. 确保Cloudflare账户存在Pages项目"
+          echo "2. 验证API Token权限 (Pages:Edit, Account:Read)"
+          echo "3. 检查GitHub Secrets (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)"
+          echo "===================================================="
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 前端部署成功!"
+          else
+            echo "❌ 前端部署失败!"
+          fi

@@ -1,0 +1,100 @@
+<template>
+  <div class="h-screen" :class="darkMode ? 'bg-gray-900' : 'bg-gray-100'">
+    <AdminSidebar
+      :dark-mode="darkMode"
+      :permissions="userPermissions"
+      :is-mobile-sidebar-open="isMobileSidebarOpen"
+      @close-mobile-sidebar="closeMobileSidebar"
+      @sidebar-toggle="handleSidebarToggle"
+      @logout="handleLogout"
+    />
+
+    <!-- 移动端顶部栏 -->
+    <AdminHeader :dark-mode="darkMode" @toggle-mobile-sidebar="toggleMobileSidebar" />
+
+    <!-- 主内容区域 - 混合导航模式，响应侧边栏收缩状态 -->
+    <main
+      class="w-full md:w-auto md:fixed md:left-64 md:top-16 md:right-0 md:bottom-0 md:overflow-y-auto focus:outline-none z-40 transition-all duration-300"
+      :class="[sidebarCollapsed ? 'md:left-16' : 'md:left-64', darkMode ? 'bg-gray-900' : 'bg-white md:bg-gray-100']"
+    >
+      <!-- 背景颜色包装器 -->
+      <div class="min-h-full flex flex-col pt-2 md:pt-4 pb-4 px-2 sm:px-4 md:px-6 lg:px-8" :class="darkMode ? 'bg-gray-900' : 'bg-gray-100 md:bg-transparent'">
+        <!-- 内容区域 -->
+        <div class="w-full mx-auto flex-1 flex flex-col" style="max-width: 1280px">
+          <div class="rounded-lg flex-1 flex flex-col" :class="darkMode ? 'bg-gray-800' : 'bg-white border border-gray-200'">
+            <!-- 页面内容 -->
+            <div class="p-2 md:p-4 flex-1 flex flex-col">
+              <router-view :permissions="userPermissions" :dark-mode="darkMode" @logout="handleLogout" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { useEventListener } from "@vueuse/core";
+import AdminSidebar from "@/modules/admin/components/AdminSidebar.vue";
+import AdminHeader from "@/modules/admin/components/AdminHeader.vue";
+import { useAuthStore } from "@/stores/authStore.js";
+import { useThemeMode } from "@/composables/core/useThemeMode.js";
+
+
+const { isDarkMode: darkMode } = useThemeMode();
+const authStore = useAuthStore();
+const router = useRouter();
+
+
+// 计算用户权限
+const userPermissions = computed(() => ({
+  isAdmin: authStore.isAdmin,
+  text: authStore.hasTextManagePermission,
+  file: authStore.hasFileManagePermission,
+  mount: authStore.hasMountPermission,
+}));
+
+const isMobileSidebarOpen = ref(false);
+const sidebarCollapsed = ref(false);
+
+const toggleMobileSidebar = () => {
+  isMobileSidebarOpen.value = !isMobileSidebarOpen.value;
+};
+
+const closeMobileSidebar = () => {
+  isMobileSidebarOpen.value = false;
+};
+
+// 处理侧边栏收缩状态变化
+const handleSidebarToggle = (event) => {
+  sidebarCollapsed.value = event.collapsed;
+};
+
+// 在组件加载时验证认证状态
+onMounted(async () => {
+  // 如果需要重新验证，则进行验证
+  if (authStore.needsRevalidation) {
+    await authStore.validateAuth();
+  }
+
+  // 监听认证状态变化事件（VueUse 自动管理监听器与清理）
+  useEventListener(window, "auth-state-changed", handleAuthStateChange);
+});
+
+
+// 处理认证状态变化
+const handleAuthStateChange = (event) => {
+  // 由于使用了响应式的计算属性，UI会自动更新
+};
+
+const emit = defineEmits(["logout"]);
+
+// 处理登出
+const handleLogout = async () => {
+  await authStore.logout();
+  // 登出后重定向到首页
+  router.push({ name: "Home" });
+};
+</script>

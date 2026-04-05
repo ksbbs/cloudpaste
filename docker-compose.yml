@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  frontend:
+    # context: .
+    #   dockerfile: docker/frontend/Dockerfile
+    #   args:
+    #     - VITE_BACKEND_URL= #构建时可以为空，因为会由entrypoint.sh覆盖
+    image: dragon730/cloudpaste-frontend:latest
+    environment:
+      - BACKEND_URL=https://xxx.com # 填写后端服务地址，通过nginx反向代理控制即可。#运行时环境变量，将被entrypoint.sh使用
+    ports:
+      - "8080:80" #"127.0.0.1:8080:80"
+    depends_on:
+      - backend # 依赖backend服务,后端服务启动后，前端服务才能启动
+    networks:
+      - cloudpaste-network
+    restart: unless-stopped
+
+  backend:
+    # build:
+    #   context: .
+    #   dockerfile: docker/backend/Dockerfile
+    image: dragon730/cloudpaste-backend:latest
+    environment:
+      - NODE_ENV=production # 生产环境模式
+      - PORT=8787 # 应用监听端口
+      # 重要: 请修改为您自己的安全密钥，用于加密数据
+      - ENCRYPTION_SECRET=default-encryption-key
+      # 管理员Token过期天数，默认7天
+      - ADMIN_TOKEN_EXPIRY_DAYS=7
+      # 任务并发数 (默认 2)
+      - TASK_WORKER_POOL_SIZE=2
+      # 调试驱动缓存 (默认 false)
+      #- DEBUG_DRIVER_CACHE=false
+    volumes:
+      - ./sql_data:/data # 将当前目录下的sql_data映射到容器的/data目录
+    ports:
+      - "8787:8787" #"127.0.0.1:8787:8787"
+    networks:
+      - cloudpaste-network
+    restart: unless-stopped # 容器异常退出时自动重启
+
+networks:
+  cloudpaste-network:
+    driver: bridge

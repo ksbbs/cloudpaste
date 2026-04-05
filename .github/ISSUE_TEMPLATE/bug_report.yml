@@ -1,0 +1,106 @@
+name: 🐛 错误报告[中文]
+description: 创建一个报告以帮助我们改进项目
+title: "[BUG]: "
+labels: ['bug']
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前检查
+      description: |
+        在提交 Issue 前请确保您已经完成了以下所有步骤。
+      options:
+        - label: 我已经查看了 **相关 Issue** 并搜索了现有的Issue没有找到类似的问题。
+          required: true
+
+  - type: dropdown
+    id: device-type
+    attributes:
+      label: 部署方式
+      description: 采用的部署方式？
+      options:
+        - Docker
+        - Cloudflare worker
+        - Cloudflare Worker And Pages
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      description: 您正在使用哪个操作系统？
+      placeholder: 例如 Windows,Linux,MacOS,IOS,Android...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: 应用/项目版本
+      description: 您正在运行的应用/项目版本是什么？
+      placeholder: 例如 v1.2.3
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-overview
+    attributes:
+      label: 问题概述 (实际行为)
+      description: |
+        请清晰、简洁地描述你遇到的错误。
+      placeholder: 详细描述您遇到的问题...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: 复现步骤
+      description: 请详细列出如何复现这个错误的步骤。如果可能，请为每个步骤附上截图。
+      placeholder: |
+        1. 前往 '...'
+        2. 点击 '....'
+        3. 滚动到 '....'
+        4. 出现错误 '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 预期行为
+      description: 请描述您期望看到的正确行为。
+      placeholder: 我期望当...时，会发生...
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图 (可选)
+      description: 如果可能，请添加截图以帮助解释您的问题。您可以将图片直接拖拽到这里。
+      placeholder: 在此粘贴或拖拽截图...
+    validations:
+      required: false
+
+  - type: textarea
+    id: console-logs
+    attributes:
+      label: 控制台日志 (如果适用)
+      description: 请复制并粘贴任何相关的控制台错误日志。这对于 Web 应用或开发者工具相关的问题尤其重要。
+      placeholder: |
+        ```text
+        在此粘贴您的错误日志...
+        ```
+      render: shell # 使用 'shell' 或 'text' 来更好地格式化日志
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 其他信息 (可选)
+      description: 还有其他你认为可能与此问题相关的背景信息吗？（例如：你是在特定的网络环境下，或者刚刚执行了某个特殊操作后出现的等）
+    validations:
+      required: false

@@ -1,0 +1,106 @@
+name: 🐛 Bug Report[EN]
+description: Create a report to help us improve the project
+title: "[BUG]: "
+labels: ['bug'] # You can adjust this if you use a different bug label, e.g., 'type/bug' or 'kind/bug'
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: |
+        Please ensure you have completed all the following steps before submitting this issue.
+      options:
+        - label: I have checked relevant issues and searched existing issues to ensure this is not a duplicate.
+          required: true
+
+  - type: dropdown
+    id: deployment-method
+    attributes:
+      label: Deployment Method
+      description: Which deployment method are you using?
+      options:
+        - Docker
+        - Cloudflare Worker
+        - Cloudflare Worker And Pages
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: Which operating system are you using?
+      placeholder: e.g., Windows, Linux, macOS, iOS, Android...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Application/Project Version
+      description: What version of the application/project are you running?
+      placeholder: e.g., v1.2.3
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-overview
+    attributes:
+      label: Bug Overview (Actual Behavior)
+      description: |
+        Please provide a clear and concise description of the bug you encountered.
+      placeholder: Describe the problem you are experiencing in detail...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Please provide detailed steps to reproduce this bug. Include screenshots for each step if possible.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: Please describe the correct behavior you were expecting.
+      placeholder: I expected that when I..., ...would happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (Optional)
+      description: If possible, please add screenshots to help explain your problem. You can drag and drop images here.
+      placeholder: Paste or drag and drop screenshots here...
+    validations:
+      required: false
+
+  - type: textarea
+    id: console-logs
+    attributes:
+      label: Console Logs (If applicable)
+      description: Please copy and paste any relevant console error logs. This is especially important for web applications or developer tool-related issues.
+      placeholder: |
+        ```text
+        Paste your error logs here...
+        ```
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context (Optional)
+      description: Is there any other background information you think might be relevant to this issue? (e.g., specific network environment, a particular action performed just before the issue, etc.)
+    validations:
+      required: false
