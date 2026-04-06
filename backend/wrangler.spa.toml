@@ -7,6 +7,11 @@ main = "unified-entry.js"
 compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# 子请求限制（免费计划默认50，可配置到最大值）
+# 索引大量文件时需要更多子请求
+[limits]
+subrequests = 1000
+
 # 开发服务器配置
 [dev]
 port = 8787
